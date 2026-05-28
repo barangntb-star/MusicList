@@ -1,0 +1,6 @@
+{
+  "name": "Pencari Lagu dan Lirik",
+  "description": "Aplikasi pencarian lagu dan lirik minimalis dengan pemutar musik interaktif dan daftar putar pribadi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
