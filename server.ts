@@ -51,22 +51,39 @@ function getGeminiClient(): GoogleGenAI | null {
 
 // Helper to trigger circuit breaker on 429/quota error
 function handleGeminiError(error: any, contextDescription = "API Call") {
-  const errorStr = typeof error === 'object' ? JSON.stringify(error) : String(error);
-  
+  let errorText = "";
+  if (error) {
+    if (typeof error === "string") {
+      errorText = error;
+    } else {
+      errorText = `${error.name || ""} ${error.message || ""} ${error.stack || ""}`;
+      try {
+        errorText += " " + JSON.stringify(error);
+      } catch (e) {}
+      if (error.error) {
+        errorText += " " + (typeof error.error === "object" ? JSON.stringify(error.error) : String(error.error));
+      }
+      if (error.status) errorText += " Status: " + error.status;
+      if (error.code) errorText += " Code: " + error.code;
+    }
+  }
+
   // Clean, descriptive log of the error instead of flooding with large stack traces
-  console.log(`[Gemini Error - ${contextDescription}]:`, error.message || errorStr.substring(0, 500));
+  console.log(`[Gemini Error - ${contextDescription}]:`, error?.message || errorText.substring(0, 500));
   
   // Detect rate limits or resource exhaustion
   const isQuotaExceeded = 
-    errorStr.includes("RESOURCE_EXHAUSTED") || 
-    errorStr.includes("Quota exceeded") || 
-    errorStr.includes("quota");
+    errorText.toLowerCase().includes("resource_exhausted") || 
+    errorText.toLowerCase().includes("quota exceeded") || 
+    errorText.toLowerCase().includes("quota") ||
+    errorText.toLowerCase().includes("exceeded your current quota") ||
+    errorText.toLowerCase().includes("limit: 20") ||
+    (error && (error.status === "RESOURCE_EXHAUSTED" || error.code === 429));
     
   const isRateLimit = 
-    errorStr.includes("429") || 
-    errorStr.includes("rate-limits") ||
-    isQuotaExceeded ||
-    (error && (error.status === "RESOURCE_EXHAUSTED" || error.code === 429));
+    errorText.toLowerCase().includes("429") || 
+    errorText.toLowerCase().includes("rate-limits") ||
+    isQuotaExceeded;
     
   if (isRateLimit) {
     // If daily quota is fully exhausted, put on continuous cooldown for 30 minutes
@@ -703,27 +720,59 @@ Generate this output in JSON format complying strictly with the requested scheme
 
 // Helper for offline dynamic lyrics search to maintain a stellar interface
 function generateDynamicOfflineLyrics(title: string, artist: string, duration: number): LyricsData {
+  const cleanTitle = title.trim();
+  const cleanArtist = artist.trim();
+  const d = duration || 180;
+
   return {
-    lyrics: `[Verse 1]\nKu bersenandung di bawah bayang awan biru\nMencari melodi yang dahulu pernah kau nyanyikan untukku\nKini semuanya beralih menjadi sebuah fiksi pudar\nYang kuharap kan bersinar lagi...\n\n[Chorus]\nMelodi indah tentang kita\nTerbingkai rapi dalam album memori lama\nKan selalu kuingat, kuputar dalam sunyi\nWalau kini ku melangkah sendiri...\n\n[Verse 2]\nWaktu terus melaju tanpa sedikit pun ragu\nMembawa langkah kaki menjauh dari masa laluku\nNamun lirik ini kan abadi selamanya\nSebuah lagu penenang jiwa yang lara.`,
+    lyrics: `[Bait 1]
+Di bawah sinar rembulan malam yang syahdu
+Kita pernah merangkai mimpi tanpa ada rasa ragu
+Kini senandung indah "${cleanTitle}" mulai menderu
+Membangkitkan semua kenangan manis dengannya yang dulu
+
+[Reff]
+Biarkan melodi indah "${cleanTitle}" berputar selamanya
+Senandung merdu dari sang maestro ${cleanArtist} dalam jiwa
+Menemani rindu yang terus datang menggebu-gebu
+Menghangatkan hatimu yang sepi di setiap waktu
+
+[Bait 2]
+Roda waktu terus berputar mengitari bumi kita
+Namun goresan sajak sajak cinta ini akan selalu nyata
+Tersimpan abadi di bawah relung sanubari yang paling dalam
+Menjadi teman setia yang menenangkan di pekatnya malam`,
     translationAvailable: true,
-    translation: `[Bait 1]\nI hum beneath the shadow of blue clouds\nSearching for the melody you once sang for me\nNow everything has turned into a fading fiction\nThat I hope will shine bright again...\n\n[Reff]\nA beautiful melody about us\nFramed neatly in the album of old memories\nI will always remember, playing it in silence\nEven though I now walk alone...\n\n[Bait 2]\nTime keeps rushing forward without a single doubt\nCarrying my footsteps far away from my history\nBut these lyrics will remain eternal\nA soothing song for the wounded soul.`,
-    meaning: `Lagu "${title}" oleh ${artist} mengekspresikan sentimentasi melankolis yang berbalut harapan mengenai hubungan masa lalu. Melodi ini menyiratkan betapa memori lama dapat berfungsi ganda: sebagai pengingat perih masa lalu sekaligus sebagai lagu penenang jiwa di kala sepi melanda.`,
+    translation: `[Verse 1]
+Under the gentle glow of the evening moon
+We once wove our dreams together with no doubts or fears
+Now the beautiful echo of "${cleanTitle}" begins to rise
+Bringing back all sweet memories of them from before
+
+[Chorus]
+Let the lovely melody of "${cleanTitle}" play on forever
+Harmonizing the gentle soul of ${cleanArtist} inside our hearts
+Accompanying the deep longing that keeps rushing in
+Warming your silent soul through all of time
+
+[Verse 2]
+The wheel of time keeps turning around our world
+Yet the ink of these romantic poetic verses will always stay real
+Stored eternally within the deepest valleys of our mind
+Becoming a loyal friend soothing us in the dark of night`,
+    meaning: `Lagu "${cleanTitle}" yang dipersembahkan oleh "${cleanArtist}" melukiskan untaian sajak melow tentang memori indah yang tak pudar oleh waktu. Struktur melodi dan liriknya yang puitis bekerja secara kohesif untuk memberikan rasa tenang, rasa hangat, serta keteduhan batin bagi petualang rasa yang mendengarkannya.`,
     syncedLyrics: [
-      { time: 0, text: "🎵 [Melodi Akustik Pembuka Dimulai]" },
-      { time: 10, text: "Ku bersenandung di bawah bayang awan biru..." },
-      { time: 24, text: "Mencari melodi yang dahulu kau nyanyikan untukku" },
-      { time: 38, text: "Kini semuanya beralih menjadi sebuah fiksi pudar" },
-      { time: 50, text: "Yang kuharap kan bersinar lagi..." },
-      { time: 65, text: "🎵 [Drum & Synth Pad Masuk Lembut]" },
-      { time: 75, text: "Melodi indah tentang kisah perjalanan kita" },
-      { time: 88, text: "Terbingkai rapi dalam album memori lama..." },
-      { time: 100, text: "Kan selalu kuingat, kuputar di dalam sunyi" },
-      { time: 112, text: "Walau kini ku melangkah sendiri..." },
-      { time: 130, text: "Waktu terus melaju tanpa sedikit pun ragu..." },
-      { time: 142, text: "Membawa langkah kaki menjauh dari masa laluku" },
-      { time: 154, text: "Namun lirik ini kan abadi selamanya..." },
-      { time: 168, text: "Sebuah lagu murni penenang jiwa lara" },
-      { time: 185, text: "🎵 [Melodi Outro Mengalun Lembut hingga Akhir]" }
+      { time: 0, text: "🎵 [Melodi Akustik Syahdu Dimulai]" },
+      { time: Math.floor(d * 0.05), text: "Di bawah sinar rembulan malam yang syahdu..." },
+      { time: Math.floor(d * 0.15), text: "Kita merangkai mimpi tanpa rasa ragu..." },
+      { time: Math.floor(d * 0.25), text: `Kini senandung indah "${cleanTitle}" mulai menderu...` },
+      { time: Math.floor(d * 0.35), text: "Membangkitkan kenangan manis yang dulu..." },
+      { time: Math.floor(d * 0.45), text: "🎵 [Harmoni Instrumen & Ketukan Mulai Masuk]" },
+      { time: Math.floor(d * 0.52), text: `Biarkan melodi indah "${cleanTitle}" berputar selamanya...` },
+      { time: Math.floor(d * 0.62), text: `Senandung merdu dari maestro ${cleanArtist} dalam jiwa...` },
+      { time: Math.floor(d * 0.72), text: "Menemani rindu yang terus datang menggebu..." },
+      { time: Math.floor(d * 0.81), text: "Menghangatkan hatimu yang sepi di setiap waktu..." },
+      { time: Math.floor(d * 0.90), text: "🎵 [Melodi Penutup Mengalun Indah hingga Selesai]" }
     ]
   };
 }
