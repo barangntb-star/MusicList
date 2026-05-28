@@ -5,12 +5,14 @@
 
 import { useState, FormEvent, MouseEvent } from "react";
 import { Song, Playlist } from "../types.js";
-import { Search, Sparkles, Plus, FolderPlus, Play, Check, Flame, Moon, Coffee, Heart, Music, Sun, Download, ExternalLink } from "lucide-react";
+import { Search, Sparkles, Plus, FolderPlus, Play, Check, Flame, Moon, Coffee, Heart, Music, Sun, Download, ExternalLink, X, ListMusic } from "lucide-react";
 
 interface SongSearchListProps {
   onSearch: (query: string) => void;
   songs: Song[];
   playlists: Playlist[];
+  currentPlaylist?: Playlist | null;
+  onClearPlaylistFilter?: () => void;
   onAddSongToPlaylist: (playlistId: string, song: Song) => void;
   onPlaySong: (song: Song, playlistContext?: Song[], forceMode?: 'mp3' | 'synth' | 'youtube') => void;
   isLoading: boolean;
@@ -40,22 +42,27 @@ export default function SongSearchList({
   onSearch,
   songs,
   playlists,
+  currentPlaylist,
+  onClearPlaylistFilter,
   onAddSongToPlaylist,
   onPlaySong,
   isLoading,
   activeSongId
 }: SongSearchListProps) {
   const [searchField, setSearchField] = useState("");
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!searchField.trim()) return;
+    setLastQuery(searchField.trim());
     onSearch(searchField.trim());
   };
 
   const handlePillClick = (query: string) => {
     setSearchField(query);
+    setLastQuery(query);
     onSearch(query);
   };
 
@@ -137,9 +144,28 @@ export default function SongSearchList({
 
       {/* Results Title */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-mono uppercase text-zinc-500 tracking-wider">
-          Katalog Temuan
-        </h3>
+        {currentPlaylist ? (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-mono uppercase bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded border border-emerald-500/20">
+              <ListMusic className="w-3.5 h-3.5" />
+              Playlist: {currentPlaylist.name}
+            </span>
+            {onClearPlaylistFilter && (
+              <button
+                type="button"
+                onClick={onClearPlaylistFilter}
+                className="flex items-center gap-1 text-[10px] bg-zinc-900 hover:bg-zinc-800 text-zinc-350 hover:text-white px-2 py-1 rounded cursor-pointer transition-all border border-zinc-800"
+              >
+                <X className="w-3 h-3 text-red-400" />
+                Semua Lagu
+              </button>
+            )}
+          </div>
+        ) : (
+          <h3 className="text-xs font-mono uppercase text-zinc-500 tracking-wider">
+            {lastQuery ? `Katalog Temuan: "${lastQuery}"` : "Katalog Temuan"}
+          </h3>
+        )}
         {songs.length > 0 && (
           <span className="text-[10px] font-mono text-zinc-500">{songs.length} Track Siap Diputar</span>
         )}
@@ -159,9 +185,29 @@ export default function SongSearchList({
           </div>
         ) : songs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-zinc-500 bg-zinc-950/20 rounded-2xl border border-zinc-800/20">
-            <Music className="w-8 h-8 text-zinc-700 mb-2" />
-            <p className="text-xs uppercase font-mono tracking-wider text-zinc-500">Katalog Tersedia</p>
-            <p className="text-[10px] text-zinc-600 mt-1 text-center px-6">Gunakan tombol kategori di atas untuk hasil instan atau mulailah mengetik lagu favorit Anda.</p>
+            <Music className="w-8 h-8 text-zinc-700 mb-2 animate-pulse" />
+            {currentPlaylist ? (
+              <>
+                <p className="text-xs uppercase font-mono tracking-wider text-emerald-400">Playlist Kosong</p>
+                <p className="text-[10px] text-zinc-500 mt-1.5 text-center px-6 leading-relaxed max-w-sm">
+                  Playlist ini belum memiliki lagu. Cari lagu favorit Anda di atas, ketuk tombol <span className="text-white font-bold font-mono">+</span> di kartu lagu untuk memasukkannya ke playlist!
+                </p>
+              </>
+            ) : lastQuery ? (
+              <>
+                <p className="text-xs uppercase font-mono tracking-wider text-amber-500/90">Lagu Tidak Ditemukan</p>
+                <p className="text-[10px] text-zinc-500 mt-1.5 text-center px-6 leading-relaxed max-w-xs">
+                  Kami tidak menemukan kata kunci <span className="text-white font-mono">"{lastQuery}"</span>. Coba cari nama penyanyi terkenal (e.g. <span className="text-emerald-400/80">Tulus</span>, <span className="text-emerald-400/80">Coldplay</span>, <span className="text-emerald-400/80">Sheila On 7</span>) atau pakai tombol kategori di atas.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs uppercase font-mono tracking-wider text-zinc-500">Katalog Tersedia</p>
+                <p className="text-[10px] text-zinc-600 mt-1.5 text-center px-6 leading-relaxed max-w-xs">
+                  Gunakan kolom pencarian di atas atau tombol kategori di atas untuk hasil instan.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           songs.map((song, idx) => {

@@ -49,6 +49,60 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+/**
+ * Executes a Gemini generateContent request with automatic retry and exponential backoff
+ * for transient errors like 503 (UNAVAILABLE), gateway timeout, or temporary overload.
+ */
+async function generateContentWithRetry(
+  ai: GoogleGenAI,
+  params: Parameters<GoogleGenAI["models"]["generateContent"]>[0]
+): Promise<ReturnType<GoogleGenAI["models"]["generateContent"]>> {
+  const maxRetries = 2;
+  let attempt = 0;
+  while (true) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (error: any) {
+      attempt++;
+      
+      let errorText = "";
+      if (error) {
+        if (typeof error === "string") {
+          errorText = error;
+        } else {
+          errorText = `${error.name || ""} ${error.message || ""} ${error.stack || ""}`;
+          try {
+            errorText += " " + JSON.stringify(error);
+          } catch (e) {}
+          if (error.error) {
+            errorText += " " + (typeof error.error === "object" ? JSON.stringify(error.error) : String(error.error));
+          }
+        }
+      }
+
+      const isRetriable = 
+        errorText.includes("503") || 
+        errorText.toLowerCase().includes("unavailable") ||
+        errorText.toLowerCase().includes("high demand") ||
+        errorText.toLowerCase().includes("temporary") ||
+        errorText.toLowerCase().includes("overloaded") ||
+        errorText.toLowerCase().includes("502") ||
+        errorText.toLowerCase().includes("bad gateway") ||
+        errorText.toLowerCase().includes("504") ||
+        errorText.toLowerCase().includes("gateway timeout");
+
+      if (isRetriable && attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt) * 500 + Math.random() * 200;
+        console.warn(`[Gemini Retry] Transient error encountered (e.g., 503/UNAVAILABLE). Retrying attempt ${attempt}/${maxRetries} in ${Math.round(delay)}ms... Error: ${error?.message || "unknown"}`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+}
+
 // Helper to trigger circuit breaker on 429/quota error
 function handleGeminiError(error: any, contextDescription = "API Call") {
   let errorText = "";
@@ -659,7 +713,8 @@ app.get("/api/youtube-suggest", async (req: Request, res: Response): Promise<voi
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
         "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
         "Cache-Control": "max-age=0"
-      }
+      },
+      signal: AbortSignal.timeout(3000)
     });
 
     if (ddgRes.ok) {
@@ -692,7 +747,8 @@ app.get("/api/youtube-suggest", async (req: Request, res: Response): Promise<voi
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
         "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
         "Cache-Control": "no-cache"
-      }
+      },
+      signal: AbortSignal.timeout(3000)
     });
 
     // If it redirected to cookie/consent screen of YouTube, we can't scrape, but we shouldn't fail/crash the endpoint.
@@ -735,11 +791,55 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  // Local fallback filter helper
+  const normalizedQuery = query.toLowerCase().trim();
+  const localMatches = FALLBACK_SONGS.filter(s => 
+    s.title.toLowerCase().includes(normalizedQuery) ||
+    s.artist.toLowerCase().includes(normalizedQuery) ||
+    s.album.toLowerCase().includes(normalizedQuery) ||
+    s.genre.toLowerCase().includes(normalizedQuery) ||
+    s.mood.toLowerCase().includes(normalizedQuery) ||
+    s.description.toLowerCase().includes(normalizedQuery)
+  );
+
+  const mergeAndRespond = (externalSongs: Song[]) => {
+    const seenIds = new Set<string>();
+    const merged: Song[] = [];
+    
+    // 1. Prepend relevant local matching songs
+    localMatches.forEach(s => {
+      if (!seenIds.has(s.id)) {
+        seenIds.add(s.id);
+        merged.push(s);
+      }
+    });
+
+    // 2. Append external search results, skipping duplicates
+    externalSongs.forEach(s => {
+      const isDuplicate = Array.from(seenIds).some(seenId => {
+        const localSong = FALLBACK_SONGS.find(fs => fs.id === seenId);
+        if (localSong) {
+          return localSong.title.toLowerCase() === s.title.toLowerCase() &&
+                 localSong.artist.toLowerCase() === s.artist.toLowerCase();
+        }
+        return false;
+      }) || seenIds.has(s.id);
+
+      if (!isDuplicate) {
+        seenIds.add(s.id);
+        merged.push(s);
+      }
+    });
+
+    res.json(merged);
+  };
+
   // First try searching the Apple iTunes Search API (extremely reliable, never blocks Cloud Run/datacenter IPs)
   try {
     const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query.trim())}&media=music&limit=15`;
     const itunesRes = await fetch(itunesUrl, {
-      headers: { "User-Agent": "AuraLirik Music Player/1.0" }
+      headers: { "User-Agent": "AuraLirik Music Player/1.0" },
+      signal: AbortSignal.timeout(2500)
     });
 
     if (itunesRes.ok) {
@@ -810,7 +910,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
           };
         });
 
-        res.json(mappedSongs);
+        mergeAndRespond(mappedSongs);
         return;
       }
     }
@@ -822,7 +922,8 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
   try {
     const searchUrl = `https://api.deezer.com/search?q=${encodeURIComponent(query.trim())}`;
     const deezerRes = await fetch(searchUrl, {
-      headers: { "User-Agent": "AuraLirik Music Player/1.0" }
+      headers: { "User-Agent": "AuraLirik Music Player/1.0" },
+      signal: AbortSignal.timeout(2500)
     });
 
     if (deezerRes.ok) {
@@ -890,7 +991,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
           };
         });
 
-        res.json(mappedSongs);
+        mergeAndRespond(mappedSongs);
         return;
       }
     }
@@ -924,7 +1025,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
 You can return real popular songs that match, or if the query describes a custom mood (e.g. 'coding at midnight in the rain' or 'relaxing under cherry blossoms'), creatively generate matching song pieces.
 For each song, you MUST provide precise chord progressions (exactly 4 chords, e.g. ["Am", "F", "C", "G"]), a clear tempo (BPM from 50 to 140), and a select synthesizer instrument (ambient, lofi, synthwave, rock, piano) to enable high quality dynamic Web Audio synthesis. Return the matching results in Indonesian language descriptions when possible.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: `Pencarian Lagu & Detail Musik: "${query}"`,
       config: {
@@ -983,15 +1084,11 @@ For each song, you MUST provide precise chord progressions (exactly 4 chords, e.
       };
     });
 
-    res.json(enhancedSongs);
+    mergeAndRespond(enhancedSongs);
   } catch (error: any) {
     handleGeminiError(error, "Search");
     // Graceful error recovery: send filtered fallback songs so user has a perfect offline search journey
-    const filtered = FALLBACK_SONGS.filter(s => 
-      s.title.toLowerCase().includes(query.toLowerCase()) || 
-      s.artist.toLowerCase().includes(query.toLowerCase())
-    );
-    res.json(filtered.length > 0 ? filtered : FALLBACK_SONGS);
+    res.json(localMatches.length > 0 ? localMatches : FALLBACK_SONGS);
   }
 });
 
@@ -1027,7 +1124,7 @@ app.post("/api/lyrics", async (req: Request, res: Response): Promise<void> => {
 
 Generate this output in JSON format complying strictly with the requested scheme.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: `Dapatkan lirik & sinkronisasi waktu untuk lagu: "${title}" oleh "${artist}" dengan durasi sekitar ${activeDuration} detik.`,
       config: {
@@ -1152,7 +1249,7 @@ app.post("/api/suggestions", async (req: Request, res: Response): Promise<void> 
     const systemPrompt = `You are a professional music curator. Given current list of user tracks: [${referenceList}], generate 3 highly matching, complimentary songs (can be real popular tracks, or custom themed fits if existing list is niche/themed).
 Ensure each suggested track features rich chord progression (4 simple chords), precise tempo (BPM 50-140), and synth instrument presets (ambient, lofi, synthwave, rock, piano) to let user play them procedurally. Write Indonesian description texts.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: "Rekomendasikan 3 lagu pendamping berdasarkan playlist saya saat ini.",
       config: {
@@ -1261,7 +1358,7 @@ Keep your conversations engaging, warm, beautifully styled, and passionate. If n
       parts: [{ text: message }]
     });
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: contents,
       config: {

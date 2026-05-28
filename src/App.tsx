@@ -772,7 +772,10 @@ export default function App() {
           <div className="flex bg-zinc-900/60 p-1.5 rounded-2xl border border-zinc-800 self-start select-none">
             <button
               id="tab-search"
-              onClick={() => setActiveTab("search")}
+              onClick={() => {
+                setActiveTab("search");
+                setCurrentPlaylist(null);
+              }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
                 activeTab === "search"
                   ? "bg-zinc-800 text-white shadow-xl"
@@ -815,6 +818,8 @@ export default function App() {
                 onSearch={handleSearchSongs}
                 songs={currentPlaylist ? currentPlaylist.songs : searchSongs}
                 playlists={playlists}
+                currentPlaylist={currentPlaylist}
+                onClearPlaylistFilter={() => setCurrentPlaylist(null)}
                 onAddSongToPlaylist={handleAddSongToPlaylist}
                 onPlaySong={playTrack}
                 isLoading={isSearchLoading}
