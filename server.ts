@@ -465,7 +465,90 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // First try searching Deezer API for real MP3 links!
+  // First try searching the Apple iTunes Search API (extremely reliable, never blocks Cloud Run/datacenter IPs)
+  try {
+    const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query.trim())}&media=music&limit=15`;
+    const itunesRes = await fetch(itunesUrl, {
+      headers: { "User-Agent": "AuraLirik Music Player/1.0" }
+    });
+
+    if (itunesRes.ok) {
+      const itunesData = await itunesRes.json();
+      if (itunesData && Array.isArray(itunesData.results) && itunesData.results.length > 0) {
+        // Map iTunes results to our rich Song structure
+        const mappedSongs = itunesData.results.map((track: any) => {
+          // Detect genre
+          let genre = track.primaryGenreName || "Pop";
+          const artistName = (track.artistName || "").toLowerCase();
+          const trackTitle = (track.trackName || "").toLowerCase();
+          const combinedText = `${artistName} ${trackTitle} ${genre.toLowerCase()}`;
+
+          if (combinedText.includes("rock") || combinedText.includes("metal") || combinedText.includes("grunge") || combinedText.includes("coldplay") || combinedText.includes("linkin")) {
+            genre = "Rock / Indierock";
+          } else if (combinedText.includes("jazz") || combinedText.includes("blues") || combinedText.includes("sinatra")) {
+            genre = "Jazz / Swing";
+          } else if (combinedText.includes("lofi") || combinedText.includes("chill") || combinedText.includes("study") || combinedText.includes("hujan")) {
+            genre = "Lofi / Chillout";
+          } else if (combinedText.includes("synth") || combinedText.includes("electronic") || combinedText.includes("neon") || combinedText.includes("80s")) {
+            genre = "Synthwave / Retro";
+          } else if (combinedText.includes("akustik") || combinedText.includes("acoustic") || combinedText.includes("folk") || combinedText.includes("guitar")) {
+            genre = "Acoustic / Folk";
+          }
+
+          // Choose synth instrument styles
+          let instrument: 'ambient' | 'lofi' | 'synthwave' | 'rock' | 'piano' = 'piano';
+          if (genre.includes("Rock")) instrument = "rock";
+          else if (genre.includes("Lofi")) instrument = "lofi";
+          else if (genre.includes("Synth")) instrument = "synthwave";
+          else if (genre.includes("Jazz")) instrument = "ambient";
+
+          const chordSets = [
+            ["C", "G", "Am", "F"],
+            ["F", "G", "Em", "Am"],
+            ["Am", "F", "C", "G"],
+            ["C", "Em", "Am", "G"],
+            ["F", "C", "G", "Am"]
+          ];
+          const progression = chordSets[Math.floor(Math.random() * chordSets.length)];
+
+          const artistNameStr = track.artistName || "Artis Tidak Dikenal";
+          const titleStr = track.trackName || "";
+          
+          // Re-scale artwork to a gorgeous 500x500 image for full high-res display
+          const albumArtUrl = track.artworkUrl100 ? track.artworkUrl100.replace("100x100bb.jpg", "500x500bb.jpg") : "";
+
+          return {
+            id: `it-${track.trackId || track.collectionId || Math.floor(Math.random() * 100000)}`,
+            title: titleStr,
+            artist: artistNameStr,
+            album: track.collectionName || "Single / Album",
+            year: track.releaseDate ? new Date(track.releaseDate).getFullYear() : new Date().getFullYear(),
+            genre: genre,
+            duration: track.trackTimeMillis ? Math.floor(track.trackTimeMillis / 1000) : 180,
+            mood: "iTunes Klasik",
+            description: `Tembang berkualitas tinggi dari artis ${artistNameStr}. Diputar via integrasi pemutar iTunes.`,
+            audioUrl: track.previewUrl, // Direct high-quality playable audio stream!
+            albumArtUrl: albumArtUrl,
+            soundcloudUrl: `https://soundcloud.com/search?q=${encodeURIComponent(artistNameStr + " " + titleStr)}`,
+            audiomackUrl: `https://audiomack.com/search?q=${encodeURIComponent(artistNameStr + " " + titleStr)}`,
+            synthParams: {
+              tempo: Math.floor(Math.random() * 30) + 75, // 75-105 BPM
+              key: "C Major",
+              progression: progression,
+              instrument: instrument
+            }
+          };
+        });
+
+        res.json(mappedSongs);
+        return;
+      }
+    }
+  } catch (itunesError) {
+    console.error("iTunes search error, transitioning to Deezer:", itunesError);
+  }
+
+  // Second fallback: try Deezer API
   try {
     const searchUrl = `https://api.deezer.com/search?q=${encodeURIComponent(query.trim())}`;
     const deezerRes = await fetch(searchUrl, {
@@ -545,6 +628,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
     console.error("Deezer search error, resolving back to Gemini:", deezerError);
   }
 
+  // Third fallback: query Gemini if available and unblocked
   const ai = getGeminiClient();
   if (!ai) {
     // Return high quality filtered fallback songs
