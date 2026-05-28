@@ -5,7 +5,7 @@
 
 import { useState, FormEvent, MouseEvent } from "react";
 import { Song, Playlist } from "../types.js";
-import { Search, Sparkles, Plus, FolderPlus, Play, Check, Flame, Moon, Coffee, Heart, Music, Sun, Download, ExternalLink, X, ListMusic } from "lucide-react";
+import { Search, Sparkles, Plus, FolderPlus, Play, Check, Flame, Moon, Coffee, Heart, Music, Sun, Download, ExternalLink, X, ListMusic, ChevronDown, ChevronUp, Disc } from "lucide-react";
 
 interface SongSearchListProps {
   onSearch: (query: string) => void;
@@ -52,6 +52,35 @@ export default function SongSearchList({
   const [searchField, setSearchField] = useState("");
   const [lastQuery, setLastQuery] = useState<string | null>(null);
   const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
+  
+  // Album search state additions
+  const [searchTarget, setSearchTarget] = useState<'track' | 'album'>('track');
+  const [expandedAlbumKey, setExpandedAlbumKey] = useState<string | null>(null);
+  const [albumTrackDropdownSongId, setAlbumTrackDropdownSongId] = useState<string | null>(null);
+
+  // Group songs into unique Albums on-the-fly
+  const groupedAlbums = (() => {
+    const albumsMap: { [key: string]: { name: string; artist: string; artworkUrl?: string; artworkSeed?: string; year: number; songs: Song[] } } = {};
+    
+    songs.forEach(song => {
+      const albumName = song.album || "Single / Album";
+      const artistName = song.artist || "Artis Tidak Dikenal";
+      const key = `${albumName.trim().toLowerCase()}|||${artistName.trim().toLowerCase()}`;
+      if (!albumsMap[key]) {
+        albumsMap[key] = {
+          name: albumName,
+          artist: artistName,
+          artworkUrl: song.albumArtUrl,
+          artworkSeed: song.albumArtSeed,
+          year: song.year || new Date().getFullYear(),
+          songs: []
+        };
+      }
+      albumsMap[key].songs.push(song);
+    });
+    
+    return Object.values(albumsMap);
+  })();
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -79,27 +108,67 @@ export default function SongSearchList({
     <div id="song-search-list-container" className="flex flex-col h-full bg-zinc-900/60 rounded-2xl border border-zinc-800 p-4 relative">
       
       {/* Search Bar Form */}
-      <form onSubmit={handleSubmit} className="relative mb-3 flex gap-2">
+      <form onSubmit={handleSubmit} className="relative mb-3 flex gap-2 w-full">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             id="input-main-search"
             type="text"
-            placeholder="Cari lagu, penyanyi, lirik, atau ketik mood (cth: 'lofi hujan')..."
+            placeholder={
+              searchTarget === 'track'
+                ? "Cari lagu, penyanyi, lirik, atau ketik mood (cth: 'lofi hujan')..."
+                : "Cari nama album atau penyanyi (cth: 'Manusia', 'Tulus', 'X&Y')..."
+            }
             value={searchField}
             onChange={(e) => setSearchField(e.target.value)}
-            className="w-full text-xs p-3.5 pl-10 bg-zinc-950/80 rounded-xl border border-zinc-800 text-white focus:outline-none focus:border-emerald-500/50 transition-all placeholder-zinc-500"
+            className="w-full text-xs p-3.5 pl-10 bg-zinc-950/80 rounded-xl border border-zinc-805 text-white focus:outline-none focus:border-emerald-500/50 transition-all placeholder-zinc-500 animate-in fade-in duration-200"
           />
         </div>
         <button
           id="btn-submit-main-search"
           type="submit"
           disabled={isLoading}
-          className="px-4 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30 font-semibold cursor-pointer text-xs disabled:opacity-50 transition-all"
+          className="px-4 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30 font-semibold cursor-pointer text-xs disabled:opacity-50 transition-all shrink-0"
         >
           {isLoading ? "MENCARI..." : "CARI"}
         </button>
       </form>
+
+      {/* Segmented Search Target Selector Tabs */}
+      <div id="search-target-selector-tabs" className="grid grid-cols-2 gap-1.5 p-1 bg-zinc-950/80 rounded-xl border border-zinc-800/80 mb-4 shrink-0 select-none">
+        <button
+          id="tab-search-track"
+          type="button"
+          onClick={() => {
+            setSearchTarget('track');
+            setExpandedAlbumKey(null);
+          }}
+          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[10px] font-bold tracking-wider transition-all cursor-pointer ${
+            searchTarget === 'track'
+              ? "bg-emerald-500/10 border border-emerald-500/35 text-emerald-300 shadow-md"
+              : "text-zinc-400 hover:text-zinc-200 border border-transparent hover:bg-zinc-900"
+          }`}
+        >
+          <Music className="w-3.5 h-3.5" />
+          🎵 LAGU & SINGLE
+        </button>
+        <button
+          id="tab-search-album"
+          type="button"
+          onClick={() => {
+            setSearchTarget('album');
+            setExpandedAlbumKey(null);
+          }}
+          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[10px] font-bold tracking-wider transition-all cursor-pointer ${
+            searchTarget === 'album'
+              ? "bg-purple-500/10 border border-purple-500/35 text-purple-300 shadow-md"
+              : "text-zinc-400 hover:text-zinc-200 border border-transparent hover:bg-zinc-900"
+          }`}
+        >
+          <Disc className="w-3.5 h-3.5" />
+          💿 ALBUM REKAMAN
+        </button>
+      </div>
 
       {/* Suggestion Pills */}
       <div id="search-cat-pills-row" className="flex items-center gap-1.5 overflow-x-auto pb-3 pr-1 shrink-0 select-none no-scrollbar">
@@ -163,11 +232,22 @@ export default function SongSearchList({
           </div>
         ) : (
           <h3 className="text-xs font-mono uppercase text-zinc-500 tracking-wider">
-            {lastQuery ? `Katalog Temuan: "${lastQuery}"` : "Katalog Temuan"}
+            {lastQuery
+              ? searchTarget === 'track'
+                ? `Katalog Temuan: "${lastQuery}"`
+                : `Album Temuan: "${lastQuery}"`
+              : searchTarget === 'track'
+              ? "Katalog Temuan"
+              : "Album Temuan"}
           </h3>
         )}
         {songs.length > 0 && (
-          <span className="text-[10px] font-mono text-zinc-500">{songs.length} Track Siap Diputar</span>
+          <span className="text-[10px] font-mono text-zinc-500">
+            {searchTarget === 'track'
+              ? `${songs.length} Track`
+              : `${groupedAlbums.length} Album`}{" "}
+            Siap Diputar
+          </span>
         )}
       </div>
 
@@ -184,8 +264,8 @@ export default function SongSearchList({
             </div>
           </div>
         ) : songs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-zinc-500 bg-zinc-950/20 rounded-2xl border border-zinc-800/20">
-            <Music className="w-8 h-8 text-zinc-700 mb-2 animate-pulse" />
+          <div className="flex flex-col items-center justify-center py-16 text-zinc-500 bg-zinc-950/20 rounded-2xl border border-zinc-800/20 animate-in fade-in duration-300">
+            {searchTarget === 'track' ? <Music className="w-8 h-8 text-zinc-705 mb-2 animate-pulse" /> : <Disc className="w-8 h-8 text-zinc-705 mb-2 animate-spin-slow" />}
             {currentPlaylist ? (
               <>
                 <p className="text-xs uppercase font-mono tracking-wider text-emerald-400">Playlist Kosong</p>
@@ -195,21 +275,241 @@ export default function SongSearchList({
               </>
             ) : lastQuery ? (
               <>
-                <p className="text-xs uppercase font-mono tracking-wider text-amber-500/90">Lagu Tidak Ditemukan</p>
+                <p className="text-xs uppercase font-mono tracking-wider text-amber-500/90">
+                  {searchTarget === 'track' ? "Lagu Tidak Ditemukan" : "Album Tidak Ditemukan"}
+                </p>
                 <p className="text-[10px] text-zinc-500 mt-1.5 text-center px-6 leading-relaxed max-w-xs">
                   Kami tidak menemukan kata kunci <span className="text-white font-mono">"{lastQuery}"</span>. Coba cari nama penyanyi terkenal (e.g. <span className="text-emerald-400/80">Tulus</span>, <span className="text-emerald-400/80">Coldplay</span>, <span className="text-emerald-400/80">Sheila On 7</span>) atau pakai tombol kategori di atas.
                 </p>
               </>
             ) : (
               <>
-                <p className="text-xs uppercase font-mono tracking-wider text-zinc-500">Katalog Tersedia</p>
+                <p className="text-xs uppercase font-mono tracking-wider text-zinc-500">
+                  {searchTarget === 'track' ? "Katalog Tersedia" : "Daftar Album Tersedia"}
+                </p>
                 <p className="text-[10px] text-zinc-600 mt-1.5 text-center px-6 leading-relaxed max-w-xs">
                   Gunakan kolom pencarian di atas atau tombol kategori di atas untuk hasil instan.
                 </p>
               </>
             )}
           </div>
+        ) : searchTarget === 'album' ? (
+          /* Album Grouped Results View */
+          <div className="space-y-3 animate-in fade-in duration-300">
+            {groupedAlbums.map((album, albumIdx) => {
+              const albumKey = `${album.name.trim().toLowerCase()}|||${album.artist.trim().toLowerCase()}`;
+              const isAlbumExpanded = expandedAlbumKey === albumKey;
+              const albumIdSeed = album.songs[0]?.id || albumIdx.toString();
+
+              return (
+                <div
+                  id={`search-album-card-${albumIdx}`}
+                  key={albumKey}
+                  className="rounded-xl border border-zinc-800/85 bg-zinc-950/40 overflow-hidden transition-all duration-300 hover:border-purple-500/30 shadow-lg"
+                >
+                  {/* Album Info Bar */}
+                  <div
+                    onClick={() => setExpandedAlbumKey(isAlbumExpanded ? null : albumKey)}
+                    className={`p-3.5 flex items-center justify-between cursor-pointer hover:bg-zinc-800/15 active:bg-zinc-800/30 transition-all ${
+                      isAlbumExpanded ? "bg-purple-950/5 border-b border-zinc-900/40" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0 pr-2">
+                      {/* Album Art Cover with Turning Vinyl Indicator on Hover */}
+                      <div className="relative group/art flex-shrink-0 select-none">
+                        {/* CD/Vinyl sliding out background effect on hover */}
+                        <div className="absolute right-[-3px] top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-zinc-950 border-4 border-zinc-800 shadow-md group-hover/art:translate-x-3 transition-transform duration-500 flex items-center justify-center z-0">
+                          <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-700 animate-spin-slow" />
+                        </div>
+                        <img
+                          src={album.artworkUrl || `https://picsum.photos/seed/${album.artworkSeed || albumIdSeed}/90/90`}
+                          alt={album.name}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-lg object-cover relative z-10 border border-zinc-800 shadow-md transition-transform duration-500 group-hover/art:-translate-x-0.5"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-zinc-100 group-hover:text-purple-300 transition-colors truncate">
+                          {album.name}
+                        </h4>
+                        <p className="text-[10px] text-zinc-450 truncate mt-0.5 flex items-center gap-1.5">
+                          <span className="truncate">{album.artist}</span>
+                          <span>•</span>
+                          <span className="font-mono text-[9px] bg-zinc-950/80 px-1.5 py-0.2 rounded text-zinc-500">{album.year}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3.5 shrink-0">
+                      <span className="text-[9px] font-mono font-bold uppercase text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 select-none">
+                        {album.songs.length} Track{album.songs.length > 1 ? 's' : ''}
+                      </span>
+                      
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {/* Play entire playlist context of album */}
+                        <button
+                          onClick={() => {
+                            if (album.songs.length > 0) {
+                              onPlaySong(album.songs[0], album.songs);
+                            }
+                          }}
+                          className="p-1 px-2.5 rounded-lg bg-purple-600/10 hover:bg-purple-600/30 text-purple-300 hover:text-white border border-purple-500/20 hover:border-purple-500/40 transition-all cursor-pointer text-[9px] font-bold flex items-center gap-1"
+                          title="Putar Seluruh Album"
+                        >
+                          <Play className="w-3 h-3 fill-purple-300 hover:fill-white shrink-0" />
+                          ALBUM
+                        </button>
+                        
+                        {/* Toggle tracklist button */}
+                        <button
+                          onClick={() => {
+                            setExpandedAlbumKey(isAlbumExpanded ? null : albumKey);
+                          }}
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer flex items-center justify-center border border-zinc-800/60"
+                        >
+                          {isAlbumExpanded ? <ChevronUp className="w-3.5 h-3.5 text-purple-300" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Track List inside the Expanded Album */}
+                  {isAlbumExpanded && (
+                    <div className="border-t border-zinc-900 bg-zinc-950/80 p-2 space-y-1.5 animate-in slide-in-from-top-2 fade-in duration-200">
+                      <div className="text-[9px] font-mono uppercase text-zinc-650 px-2.5 pt-1 flex justify-between items-center select-none pb-0.5">
+                        <span>DAFTAR TRACKS</span>
+                        <span>DAPAT DIPUTAR LANGSUNG</span>
+                      </div>
+                      
+                      <div className="divide-y divide-zinc-900/60">
+                        {album.songs.map((song, sIdx) => {
+                          const isSongActive = activeSongId === song.id;
+                          return (
+                            <div
+                              id={`album-song-row-${song.id}`}
+                              key={song.id}
+                              onClick={() => onPlaySong(song, album.songs)}
+                              className={`p-2 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between text-xs group ${
+                                isSongActive
+                                  ? "bg-purple-500/10 border-l-2 border-purple-500 text-purple-100"
+                                  : "hover:bg-zinc-908/40 text-zinc-400 hover:text-zinc-200"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                                <span className="text-[9px] font-mono text-zinc-600 w-3.5 select-none font-semibold">
+                                  {(sIdx + 1).toString().padStart(2, '0')}
+                                </span>
+                                <div className="truncate min-w-0">
+                                  <div className="font-semibold text-xs truncate group-hover:text-purple-300 transition-colors flex items-center gap-1.5">
+                                    {song.title}
+                                    {isSongActive && <span className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-ping inline-block" />}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-1 select-none flex-wrap">
+                                    <span className="text-[8px] font-mono bg-zinc-900/60 px-1 py-0.2 rounded text-zinc-500 border border-zinc-800/40">
+                                      {song.genre}
+                                    </span>
+                                    {song.synthParams?.instrument && (
+                                      <span className="text-[8px] font-mono bg-zinc-900/60 px-1 py-0.2 rounded text-zinc-500 capitalize">
+                                        🎹 {song.synthParams.instrument}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 ml-1 shrink-0 relative" onClick={(e) => e.stopPropagation()}>
+                                <span className="text-[10px] font-mono text-zinc-650 mr-1 selection:bg-transparent">
+                                  {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}
+                                </span>
+
+                                <div className="flex items-center gap-1">
+                                  {/* SC Button */}
+                                  <a
+                                    href={song.soundcloudUrl || `https://soundcloud.com/search?q=${encodeURIComponent(song.artist + ' ' + song.title)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-1 py-0.5 rounded text-[8px] font-bold bg-orange-600/10 hover:bg-orange-600/30 text-orange-400 border border-orange-500/20 transition-all cursor-pointer"
+                                    title="Dengarkan Gratis di SoundCloud"
+                                  >
+                                    SC
+                                  </a>
+
+                                  {/* AM Button */}
+                                  <a
+                                    href={song.audiomackUrl || `https://audiomack.com/search?q=${encodeURIComponent(song.artist + ' ' + song.title)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-1 py-0.5 rounded text-[8px] font-bold bg-amber-500/10 hover:bg-amber-500/30 text-amber-500 border border-amber-500/20 transition-all cursor-pointer"
+                                    title="Dengarkan Gratis di Audiomack"
+                                  >
+                                    AM
+                                  </a>
+
+                                  {/* YT Player Button */}
+                                  <button
+                                    onClick={() => onPlaySong(song, album.songs, 'youtube')}
+                                    className="px-1 py-0.5 rounded text-[8px] font-bold bg-red-600/15 hover:bg-red-600/30 text-red-500 border border-red-500/20 transition-all cursor-pointer"
+                                    title="Tonton video & lirik langsung di YouTube Player"
+                                  >
+                                    YT
+                                  </button>
+                                </div>
+
+                                {/* Add to Playlist inside Album */}
+                                <div className="relative ml-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAlbumTrackDropdownSongId(albumTrackDropdownSongId === song.id ? null : song.id);
+                                    }}
+                                    className="p-1 rounded bg-zinc-900 border border-zinc-800/80 text-zinc-400 hover:text-white transition-all cursor-pointer flex items-center justify-center hover:bg-zinc-800"
+                                    title="Tambahkan ke Playlist"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+
+                                  {albumTrackDropdownSongId === song.id && (
+                                    <div
+                                      className="absolute right-0 mt-1 w-44 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs text-zinc-300 space-y-1 animate-in fade-in slide-in-from-top-2 duration-150"
+                                    >
+                                      <p className="text-[9px] font-mono uppercase text-zinc-500 px-2 py-1 border-b border-zinc-900">MASUKKAN KE PLAYLIST</p>
+                                      {playlists.length === 0 ? (
+                                        <div className="p-2 text-center text-[10px] text-zinc-650 font-mono italic">
+                                          Belum ada playlist. Buat dulu di panel sebelah!
+                                        </div>
+                                      ) : (
+                                        playlists.map((pl) => (
+                                          <button
+                                            key={pl.id}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onAddSongToPlaylist(pl.id, song);
+                                              setAlbumTrackDropdownSongId(null);
+                                            }}
+                                            className="w-full text-left p-1.5 hover:bg-emerald-500/10 hover:text-emerald-300 rounded-lg flex items-center gap-1.5 font-medium transition-colors cursor-pointer"
+                                          >
+                                            <Check className="w-3 h-3 opacity-60 text-emerald-400" />
+                                            <span className="truncate">{pl.name}</span>
+                                          </button>
+                                        ))
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : (
+          /* Standard Song Results View (Original Map) */
           songs.map((song, idx) => {
             const isSongActive = activeSongId === song.id;
             return (
@@ -363,7 +663,7 @@ export default function SongSearchList({
                       >
                         <p className="text-[9px] font-mono uppercase text-zinc-500 px-2 py-1 border-b border-zinc-900">MASUKKAN KE PLAYLIST</p>
                         {playlists.length === 0 ? (
-                          <div className="p-2 text-center text-[10px] text-zinc-600 font-mono italic">
+                          <div className="p-2 text-center text-[10px] text-zinc-650 font-mono italic">
                             Belum ada playlist. Buat dulu di panel sebelah!
                           </div>
                         ) : (
