@@ -220,7 +220,7 @@ export default function App() {
       return `https://www.youtube.com/embed/${knownId}?autoplay=1&enablejsapi=1&rel=0`;
     }
     
-    return `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(song.artist + " " + song.title + " (Lyrics)")}${isPlaying ? '&autoplay=1' : ''}`;
+    return `https://www.youtube.com/embed/videoseries?listType=search&list=${encodeURIComponent(song.artist + " " + song.title + " (Lyrics)")}&autoplay=1&enablejsapi=1&rel=0`;
   };
 
   // Status loading indicators
@@ -282,6 +282,30 @@ export default function App() {
       if (timer) clearInterval(timer);
     };
   }, [isPlaying, currentSong?.id, loopState, playbackMode]);
+
+  // Synchronize playing state with YouTube Iframe API via postMessage
+  useEffect(() => {
+    if (playbackMode !== 'youtube' || !currentSong) return;
+
+    // Send command to the iframe after a tiny timeout to ensure it has begun rendering/loading
+    const timeoutId = setTimeout(() => {
+      const iframe = document.getElementById("youtube-player-iframe") as HTMLIFrameElement | null;
+      if (!iframe || !iframe.contentWindow) return;
+      
+      try {
+        const cmd = isPlaying ? "playVideo" : "pauseVideo";
+        iframe.contentWindow.postMessage(JSON.stringify({
+          event: "command",
+          func: cmd,
+          args: ""
+        }), "*");
+      } catch (e) {
+        console.error("[YouTube Sync] Failed to postMessage:", e);
+      }
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [isPlaying, currentSong?.id, playbackMode]);
 
   // Synchronize play button with synth parameters
   const playTrack = (song: Song, queueContext?: Song[], forceMode?: 'mp3' | 'synth' | 'youtube') => {
