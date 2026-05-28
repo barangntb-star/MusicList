@@ -758,7 +758,7 @@ export default function App() {
               <AudioVisualizer
                 analyser={synthRef.current?.getAnalyser() || null}
                 isPlaying={isPlaying}
-                accentColor={currentSong?.synthParams.instrument === 'synthwave' ? '#f43f5e' : '#10b981'}
+                accentColor={currentSong?.synthParams?.instrument === 'synthwave' ? '#f43f5e' : '#10b981'}
               />
             )}
           </div>
@@ -870,16 +870,16 @@ export default function App() {
                 {currentSong ? currentSong.title : "Pilih Lagu Temuan"}
               </h4>
               <p className="text-[10px] text-zinc-500 truncate mt-0.5">
-                {currentSong ? `${currentSong.artist} • ${currentSong.synthParams.key}` : "Ketuk putar pada lagu katalog"}
+                {currentSong ? `${currentSong.artist} • ${currentSong.synthParams?.key || 'C Major'}` : "Ketuk putar pada lagu katalog"}
               </p>
               {currentSong && (
                 <div className="flex flex-col gap-1 mt-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[8px] font-mono bg-zinc-900 px-1 py-0.5 rounded text-zinc-400 capitalize">
-                      {currentSong.synthParams.instrument} Style
+                      {currentSong.synthParams?.instrument || 'piano'} Style
                     </span>
                     <span className="text-[8px] font-mono text-zinc-600">
-                      {currentSong.synthParams.tempo} BPM
+                      {currentSong.synthParams?.tempo || 80} BPM
                     </span>
                   </div>
                   {/* SoundCloud & Audiomack Direct Connections & MP3 Downloads */}

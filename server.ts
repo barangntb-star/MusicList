@@ -205,6 +205,276 @@ const FALLBACK_SONGS: Song[] = [
       instrument: "piano"
     },
     albumArtSeed: "sinatra-moon"
+  },
+  {
+    id: "dan-sheila-on-7",
+    title: "Dan...",
+    artist: "Sheila On 7",
+    album: "Kisah Klasik Untuk Masa Depan",
+    year: 1999,
+    genre: "Indonesian Pop / Rock",
+    duration: 286,
+    mood: "Penyesalan / Populer",
+    description: "Lagu legendaris Indonesia tentang permintaan maaf terdalam dan merelakan pasangan demi kebahagiaannya.",
+    synthParams: {
+      tempo: 92,
+      key: "G Major",
+      progression: ["G", "Bm", "C", "D"],
+      instrument: "rock"
+    },
+    albumArtSeed: "sheilaon7-dan"
+  },
+  {
+    id: "kangen-dewa-19",
+    title: "Kangen",
+    artist: "Dewa 19",
+    album: "Dewa 19",
+    year: 1992,
+    genre: "Classic Rock / Pop",
+    duration: 315,
+    mood: "Romantis / Rindu",
+    description: "Balada cinta legendaris penawar rindu yang digubah dengan harmonisasi vokal legendaris Indonesia.",
+    synthParams: {
+      tempo: 78,
+      key: "D Major",
+      progression: ["D", "F#m", "G", "A"],
+      instrument: "rock"
+    },
+    albumArtSeed: "dewa19-kangen"
+  },
+  {
+    id: "evaluasi-hindia",
+    title: "Evaluasi",
+    artist: "Hindia",
+    album: "Menari Dengan Bayangan",
+    year: 2019,
+    genre: "Indie Pop",
+    duration: 204,
+    mood: "Motivasi / Tenang",
+    description: "Lagu penenang sekaligus pengingat diri bahwa segala rintangan hidup adalah bagian dari proses belajar.",
+    synthParams: {
+      tempo: 88,
+      key: "C Major",
+      progression: ["F", "G", "Em", "Am"],
+      instrument: "ambient"
+    },
+    albumArtSeed: "hindia-evaluasi"
+  },
+  {
+    id: "bertaut-nadin-amizah",
+    title: "Bertaut",
+    artist: "Nadin Amizah",
+    album: "Selamat Ulang Tahun",
+    year: 2020,
+    genre: "Acoustic / Folk",
+    duration: 312,
+    mood: "Intim / Melankolis",
+    description: "Ungkapan cinta tulus seorang anak kepada ibunya melalui lirik puitis dan petikan gitar hangat.",
+    synthParams: {
+      tempo: 65,
+      key: "C Major",
+      progression: ["C", "Am", "F", "G"],
+      instrument: "piano"
+    },
+    albumArtSeed: "nadin-bertaut"
+  },
+  {
+    id: "to-the-bone-pamungkas",
+    title: "To the Bone",
+    artist: "Pamungkas",
+    album: "Flying Solo",
+    year: 2019,
+    genre: "Indie Pop / Soul",
+    duration: 344,
+    mood: "Romantis / Hangat",
+    description: "Lagu romantis sensasional bernuansa retro soul tentang mencintai seseorang hingga ke sumsum tulang.",
+    synthParams: {
+      tempo: 76,
+      key: "F Major",
+      progression: ["F", "Em", "Dm", "C"],
+      instrument: "piano"
+    },
+    albumArtSeed: "pamungkas-tothebone"
+  },
+  {
+    id: "ojo-dibandingke-koplo",
+    title: "Ojo Dibandingke",
+    artist: "Koplo Beats",
+    album: "Nusantara Hits",
+    year: 2022,
+    genre: "Dangdut Koplo",
+    duration: 210,
+    mood: "Ceria / Bergoyang",
+    description: "Alunan ceria kendang dangdut koplo modern tentang kesetiaan hati yang tak perlu dibanding-bandingkan.",
+    synthParams: {
+      tempo: 125,
+      key: "C Major",
+      progression: ["C", "F", "G", "C"],
+      instrument: "synthwave"
+    },
+    albumArtSeed: "koplo-ojo"
+  },
+  {
+    id: "ocean-eyes-billie",
+    title: "Ocean Eyes",
+    artist: "Billie Eilish",
+    album: "Don't Smile at Me",
+    year: 2016,
+    genre: "Indie Pop / Chill",
+    duration: 200,
+    mood: "Surgawi / Sendu",
+    description: "Lagu minimalis bernuansa pop sferik yang menyoroti vokal magis dan lirik tentang mata seindah samudra.",
+    synthParams: {
+      tempo: 72,
+      key: "E Minor",
+      progression: ["Em", "C", "G", "D"],
+      instrument: "ambient"
+    },
+    albumArtSeed: "billie-ocean"
+  },
+  {
+    id: "shinunoga-e-wa-jpop",
+    title: "Shinunoga E-Wa",
+    artist: "Fujii Kaze",
+    album: "Help Ever Hurt Never",
+    year: 2020,
+    genre: "J-Pop / Soul",
+    duration: 185,
+    mood: "Romantis / Megah",
+    description: "Melodi pop Jepang puitis yang viral tentang komitmen cinta ekstrem yang mendalam melebihi maut.",
+    synthParams: {
+      tempo: 82,
+      key: "A Minor",
+      progression: ["Am", "Dm", "F", "E"],
+      instrument: "piano"
+    },
+    albumArtSeed: "kaze-shinunoga"
+  },
+  {
+    id: "dynamite-bts",
+    title: "Dynamite",
+    artist: "BTS",
+    album: "Be",
+    year: 2020,
+    genre: "K-Pop / Dance",
+    duration: 199,
+    mood: "Sangat Bersemangat",
+    description: "Disco-pop penuh warna berenergi tinggi yang mencerahkan hari dan mengajak semua orang berdansa.",
+    synthParams: {
+      tempo: 114,
+      key: "C Major",
+      progression: ["Am", "Dm", "G", "C"],
+      instrument: "synthwave"
+    },
+    albumArtSeed: "bts-dynamite"
+  },
+  {
+    id: "yellow-coldplay",
+    title: "Yellow",
+    artist: "Coldplay",
+    album: "Parachutes",
+    year: 2000,
+    genre: "Alternative Rock",
+    duration: 269,
+    mood: "Romantis / Klasik",
+    description: "Sebuah ode cinta murni yang hangat dengan dominasi petikan gitar rock alternatif khas era milenium.",
+    synthParams: {
+      tempo: 87,
+      key: "B Major",
+      progression: ["C", "G", "Am", "F"],
+      instrument: "rock"
+    },
+    albumArtSeed: "coldplay-yellow"
+  },
+  {
+    id: "leave-the-door-open-mars",
+    title: "Leave the Door Open",
+    artist: "Silk Sonic",
+    album: "An Evening with Silk Sonic",
+    year: 2021,
+    genre: "Retro Soul / R&B",
+    duration: 242,
+    mood: "Sangat Romantis / Halus",
+    description: "Kombinasi harmonis soul klasik 70-an yang super manis, romantis, dan dibawakan dengan mulus.",
+    synthParams: {
+      tempo: 82,
+      key: "C Major",
+      progression: ["F", "G", "Em", "Am"],
+      instrument: "piano"
+    },
+    albumArtSeed: "silk-open"
+  },
+  {
+    id: "jujur-radja-pop",
+    title: "Jujur",
+    artist: "Radja",
+    album: "Langkah Baru",
+    year: 2004,
+    genre: "Indonesian Pop / Rock",
+    duration: 272,
+    mood: "Kecewa / Berenergi",
+    description: "Hits pop rock ikonik Indonesia tentang luapan emosi atas ketidakjujuran pasangan.",
+    synthParams: {
+      tempo: 105,
+      key: "G Major",
+      progression: ["Am", "D", "G", "Em"],
+      instrument: "rock"
+    },
+    albumArtSeed: "radja-jujur"
+  },
+  {
+    id: "kala-surya-tenggelam-chrisye",
+    title: "Kala Surya Tenggelam",
+    artist: "Chrisye",
+    album: "Puspa Indah",
+    year: 1978,
+    genre: "Indonesian Legend",
+    duration: 228,
+    mood: "Mistis / Romantis",
+    description: "Lagu legendaris megah nan puitis tentang kisah suka duka sepasang kekasih di kala senja tiba.",
+    synthParams: {
+      tempo: 75,
+      key: "D Minor",
+      progression: ["Dm", "Gm", "C", "F"],
+      instrument: "ambient"
+    },
+    albumArtSeed: "chrisye-suryatenggelam"
+  },
+  {
+    id: "mungkin-nanti-peterpan",
+    title: "Mungkin Nanti",
+    artist: "Peterpan",
+    album: "Bintang di Surga",
+    year: 2004,
+    genre: "Indonesian Alt Rock",
+    duration: 268,
+    mood: "Melankolis / Berdamai",
+    description: "Balada gitar legendaris tentang merelakan kepergian kekasih dengan harapan kebahagiaan di masa depan.",
+    synthParams: {
+      tempo: 84,
+      key: "A Major",
+      progression: ["A", "C#m", "D", "E"],
+      instrument: "rock"
+    },
+    albumArtSeed: "peterpan-mungkin"
+  },
+  {
+    id: "cozy-rainy-lofi",
+    title: "Hujan Sore Hari",
+    artist: "Lofi Rain",
+    album: "Rainy Cafe Vibes",
+    year: 2024,
+    genre: "Lofi Chillout / Jazz",
+    duration: 180,
+    mood: "Sangat Tenang / Sendu",
+    description: "Paduan ketukan santai teriring suara rintik hujan yang syahdu, sangat cocok untuk fokus bekerja.",
+    synthParams: {
+      tempo: 75,
+      key: "C Major",
+      progression: ["F", "G", "Em", "Am"],
+      instrument: "lofi"
+    },
+    albumArtSeed: "lofi-hujan"
   }
 ];
 

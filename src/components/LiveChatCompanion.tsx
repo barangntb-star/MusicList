@@ -196,7 +196,7 @@ export default function LiveChatCompanion({
                               <div className="font-bold text-zinc-200 truncate flex items-center gap-1">
                                 {song.title}
                                 <span className="text-[7px] font-mono text-zinc-500 bg-zinc-950 px-1 py-0.5 rounded capitalize">
-                                  {song.synthParams.instrument}
+                                  {song.synthParams?.instrument || 'piano'}
                                 </span>
                               </div>
                               <div className="text-[10px] text-zinc-500 truncate">{song.artist}</div>

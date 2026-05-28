@@ -214,7 +214,7 @@ export default function SongSearchList({
                       </span>
                       <span className="text-[8px] font-mono bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-400 capitalize flex items-center gap-0.5">
                         <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                        {song.synthParams.instrument}
+                        {song.synthParams?.instrument || 'piano'}
                       </span>
                       <span className="text-[9px] text-zinc-500 italic truncate max-w-full">
                         {song.description}

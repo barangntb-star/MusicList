@@ -141,12 +141,12 @@ export class AudioSynthManager {
   }
 
   private playSynthDirect(song: Song) {
-    this.bpm = song.synthParams.tempo || 80;
-    this.chordProgression = song.synthParams.progression || ["C", "Am", "F", "G"];
+    this.bpm = song.synthParams?.tempo || 80;
+    this.chordProgression = song.synthParams?.progression || ["C", "Am", "F", "G"];
     if (this.chordProgression.length === 0) {
       this.chordProgression = ["C", "G", "Am", "F"];
     }
-    this.instrumentStyle = song.synthParams.instrument || "piano";
+    this.instrumentStyle = song.synthParams?.instrument || "piano";
     this.currentChordIndex = 0;
     this.beatCounter = 0;
 
