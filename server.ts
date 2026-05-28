@@ -7,7 +7,6 @@ import express, { Request, Response } from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createServer as createViteServer } from "vite";
 import { Song, LyricsData } from "./src/types.js";
 
 // Load environment variables
@@ -21,6 +20,11 @@ app.use(express.json());
 // Initialize Gemini Client Lazily/Safely
 let aiClient: GoogleGenAI | null = null;
 let geminiCooldownUntil = 0;
+
+// In-Memory Caching to drastically protect Gemini 20 req/day API quota limits
+const lyricsCache = new Map<string, any>();
+const suggestionsCache = new Map<string, any>();
+const searchCache = new Map<string, any>();
 
 function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -47,6 +51,44 @@ function getGeminiClient(): GoogleGenAI | null {
     });
   }
   return aiClient;
+}
+
+/**
+ * Strips raw markdown fences and isolates JSON contents safely, avoiding
+ * syntax errors standard to conversational preambles/postambles.
+ */
+function cleanAndParseJSON<T>(jsonText: string, fallback: T): T {
+  try {
+    let cleanText = jsonText.trim();
+    // Strip markdown code fences if present
+    if (cleanText.startsWith("```")) {
+      cleanText = cleanText.replace(/^```[a-zA-Z-]*\s*/g, "").replace(/\s*```$/g, "").trim();
+    }
+    return JSON.parse(cleanText) as T;
+  } catch (err) {
+    console.warn("[JSON Clean Parser] Direct parse failed, trying regex extraction:", err);
+    try {
+      // Try to find the first [ or { and last ] or } to isolate the JSON block
+      const startArray = jsonText.indexOf("[");
+      const endArray = jsonText.lastIndexOf("]");
+      const startObj = jsonText.indexOf("{");
+      const endObj = jsonText.lastIndexOf("}");
+      
+      let candidate: string | null = null;
+      if (startArray !== -1 && endArray !== -1 && (startObj === -1 || startArray < startObj)) {
+        candidate = jsonText.substring(startArray, endArray + 1);
+      } else if (startObj !== -1 && endObj !== -1) {
+        candidate = jsonText.substring(startObj, endObj + 1);
+      }
+      
+      if (candidate) {
+        return JSON.parse(candidate) as T;
+      }
+    } catch (regexErr) {
+      console.error("[JSON Clean Parser] Regex isolation failed as well:", regexErr);
+    }
+    return fallback;
+  }
 }
 
 /**
@@ -793,6 +835,14 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
 
   // Local fallback filter helper
   const normalizedQuery = query.toLowerCase().trim();
+
+  // Protect quota and return cached search results if available
+  if (searchCache.has(normalizedQuery)) {
+    console.log(`[Cache Hit] Serving search results for query "${query}" from cache.`);
+    res.json(searchCache.get(normalizedQuery));
+    return;
+  }
+
   const localMatches = FALLBACK_SONGS.filter(s => 
     s.title.toLowerCase().includes(normalizedQuery) ||
     s.artist.toLowerCase().includes(normalizedQuery) ||
@@ -831,23 +881,28 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
       }
     });
 
+    // Save in-memory search results to prevent repetitive future hits
+    searchCache.set(normalizedQuery, merged);
     res.json(merged);
   };
 
-  // First try searching the Apple iTunes Search API (extremely reliable, never blocks Cloud Run/datacenter IPs)
+  // We will run iTunes and Deezer concurrently with a fast 1.5s timeout.
+  // This completely eliminates cascading sequential timeouts if external requests are firewalled!
+  let externalSongs: Song[] = [];
+
   try {
     const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query.trim())}&media=music&limit=15`;
-    const itunesRes = await fetch(itunesUrl, {
-      headers: { "User-Agent": "AuraLirik Music Player/1.0" },
-      signal: AbortSignal.timeout(2500)
-    });
+    const deezerUrl = `https://api.deezer.com/search?q=${encodeURIComponent(query.trim())}`;
 
-    if (itunesRes.ok) {
-      const itunesData = await itunesRes.json();
-      if (itunesData && Array.isArray(itunesData.results) && itunesData.results.length > 0) {
-        // Map iTunes results to our rich Song structure
-        const mappedSongs = itunesData.results.map((track: any) => {
-          // Detect genre
+    const [itunesResult, deezerResult] = await Promise.all([
+      fetch(itunesUrl, {
+        headers: { "User-Agent": "AuraLirik Music Player/1.0" },
+        signal: AbortSignal.timeout(1500)
+      }).then(async (res) => {
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (!data || !Array.isArray(data.results)) return [];
+        return data.results.map((track: any) => {
           let genre = track.primaryGenreName || "Pop";
           const artistName = (track.artistName || "").toLowerCase();
           const trackTitle = (track.trackName || "").toLowerCase();
@@ -865,7 +920,6 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
             genre = "Acoustic / Folk";
           }
 
-          // Choose synth instrument styles
           let instrument: 'ambient' | 'lofi' | 'synthwave' | 'rock' | 'piano' = 'piano';
           if (genre.includes("Rock")) instrument = "rock";
           else if (genre.includes("Lofi")) instrument = "lofi";
@@ -882,9 +936,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
           const progression = chordSets[Math.floor(Math.random() * chordSets.length)];
 
           const artistNameStr = track.artistName || "Artis Tidak Dikenal";
-          const titleStr = track.trackName || "";
-          
-          // Re-scale artwork to a gorgeous 500x500 image for full high-res display
+          const titleStr = track.trackName || "Lagu Tembang";
           const albumArtUrl = track.artworkUrl100 ? track.artworkUrl100.replace("100x100bb.jpg", "500x500bb.jpg") : "";
 
           return {
@@ -897,41 +949,31 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
             duration: track.trackTimeMillis ? Math.floor(track.trackTimeMillis / 1000) : 180,
             mood: "iTunes Klasik",
             description: `Tembang berkualitas tinggi dari artis ${artistNameStr}. Diputar via integrasi pemutar iTunes.`,
-            audioUrl: track.previewUrl, // Direct high-quality playable audio stream!
+            audioUrl: track.previewUrl,
             albumArtUrl: albumArtUrl,
             soundcloudUrl: `https://soundcloud.com/search?q=${encodeURIComponent(artistNameStr + " " + titleStr)}`,
             audiomackUrl: `https://audiomack.com/search?q=${encodeURIComponent(artistNameStr + " " + titleStr)}`,
             synthParams: {
-              tempo: Math.floor(Math.random() * 30) + 75, // 75-105 BPM
+              tempo: Math.floor(Math.random() * 30) + 75,
               key: "C Major",
               progression: progression,
               instrument: instrument
             }
           };
-        });
+        }).filter(Boolean);
+      }).catch((e) => {
+        console.warn("[Search] iTunes parallel fetch failed:", e.message);
+        return [];
+      }),
 
-        mergeAndRespond(mappedSongs);
-        return;
-      }
-    }
-  } catch (itunesError) {
-    console.error("iTunes search error, transitioning to Deezer:", itunesError);
-  }
-
-  // Second fallback: try Deezer API
-  try {
-    const searchUrl = `https://api.deezer.com/search?q=${encodeURIComponent(query.trim())}`;
-    const deezerRes = await fetch(searchUrl, {
-      headers: { "User-Agent": "AuraLirik Music Player/1.0" },
-      signal: AbortSignal.timeout(2500)
-    });
-
-    if (deezerRes.ok) {
-      const deezerData = await deezerRes.json();
-      if (deezerData && Array.isArray(deezerData.data) && deezerData.data.length > 0) {
-        // Map Deezer items to our rich Song structure
-        const mappedSongs = deezerData.data.slice(0, 15).map((track: any) => {
-          // Detect genre
+      fetch(deezerUrl, {
+        headers: { "User-Agent": "AuraLirik Music Player/1.0" },
+        signal: AbortSignal.timeout(1500)
+      }).then(async (res) => {
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (!data || !Array.isArray(data.data)) return [];
+        return data.data.slice(0, 15).map((track: any) => {
           let genre = "Pop";
           const artistName = (track.artist?.name || "").toLowerCase();
           const trackTitle = (track.title || "").toLowerCase();
@@ -949,7 +991,6 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
             genre = "Acoustic / Folk";
           }
 
-          // Choose synth instrument styles
           let instrument: 'ambient' | 'lofi' | 'synthwave' | 'rock' | 'piano' = 'piano';
           if (genre.includes("Rock")) instrument = "rock";
           else if (genre.includes("Lofi")) instrument = "lofi";
@@ -966,7 +1007,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
           const progression = chordSets[Math.floor(Math.random() * chordSets.length)];
 
           const artistNameStr = track.artist?.name || "Artis Tidak Dikenal";
-          const titleStr = track.title || "";
+          const titleStr = track.title || "Tembang Musik";
 
           return {
             id: `dz-${track.id}`,
@@ -978,25 +1019,48 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
             duration: track.duration || 180,
             mood: "Pencarian MP3 Aktual",
             description: `Tembang berkualitas tinggi dari artis ${artistNameStr}. Mainkan audio asli via mode MP3.`,
-            audioUrl: track.preview, // The 30s official MP3 preview link!
-            albumArtUrl: track.album?.cover_medium || "", // The official album cover art!
+            audioUrl: track.preview,
+            albumArtUrl: track.album?.cover_medium || "",
             soundcloudUrl: `https://soundcloud.com/search?q=${encodeURIComponent(artistNameStr + " " + titleStr)}`,
             audiomackUrl: `https://audiomack.com/search?q=${encodeURIComponent(artistNameStr + " " + titleStr)}`,
             synthParams: {
-              tempo: Math.floor(Math.random() * 30) + 75, // 75-105 BPM
+              tempo: Math.floor(Math.random() * 30) + 75,
               key: "C Major",
               progression: progression,
               instrument: instrument
             }
           };
-        });
+        }).filter(Boolean);
+      }).catch((e) => {
+        console.warn("[Search] Deezer parallel fetch failed:", e.message);
+        return [];
+      })
+    ]);
 
-        mergeAndRespond(mappedSongs);
-        return;
+    // Merge iTunes and Deezer results cleanly, prioritizing iTunes
+    const seen = new Set<string>();
+    itunesResult.forEach((s: Song) => {
+      const key = `${s.title.toLowerCase()}|||${s.artist.toLowerCase()}`;
+      seen.add(key);
+      externalSongs.push(s);
+    });
+    deezerResult.forEach((s: Song) => {
+      const key = `${s.title.toLowerCase()}|||${s.artist.toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        externalSongs.push(s);
       }
-    }
-  } catch (deezerError) {
-    console.error("Deezer search error, resolving back to Gemini:", deezerError);
+    });
+
+  } catch (parallelErr) {
+    console.error("[Search] Parallel fetches thrown an unexpected error:", parallelErr);
+  }
+
+  // If we collected any external catalog results, return them immediately and complete!
+  if (externalSongs.length > 0) {
+    console.log(`[Search] Parallel fetches resolved ${externalSongs.length} unique tracks successfully!`);
+    mergeAndRespond(externalSongs);
+    return;
   }
 
   // Third fallback: query Gemini if available and unblocked
@@ -1005,6 +1069,7 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
     // Return high quality filtered fallback songs
     const normalizedQuery = query.toLowerCase().trim();
     if (normalizedQuery === "") {
+      searchCache.set(normalizedQuery, FALLBACK_SONGS);
       res.json(FALLBACK_SONGS);
       return;
     }
@@ -1015,8 +1080,10 @@ app.post("/api/search", async (req: Request, res: Response): Promise<void> => {
       s.mood.toLowerCase().includes(normalizedQuery) ||
       s.description.toLowerCase().includes(normalizedQuery)
     );
-    // If no filtered matches, return everything to keep UI beautiful and highly interactive
-    res.json(filtered.length > 0 ? filtered : FALLBACK_SONGS);
+    const finalFallbackSongs = filtered.length > 0 ? filtered : FALLBACK_SONGS;
+    // Cache the offline response as well to bypass future checks
+    searchCache.set(normalizedQuery, finalFallbackSongs);
+    res.json(finalFallbackSongs);
     return;
   }
 
@@ -1071,7 +1138,7 @@ For each song, you MUST provide precise chord progressions (exactly 4 chords, e.
     });
 
     const resultText = response.text || "[]";
-    const parsedSongsData = JSON.parse(resultText);
+    const parsedSongsData = cleanAndParseJSON<any[]>(resultText, []);
     
     // Inject custom albumArtSeed to standardise Unsplash picture loads
     const enhancedSongs = parsedSongsData.map((song: any) => {
@@ -1087,8 +1154,10 @@ For each song, you MUST provide precise chord progressions (exactly 4 chords, e.
     mergeAndRespond(enhancedSongs);
   } catch (error: any) {
     handleGeminiError(error, "Search");
-    // Graceful error recovery: send filtered fallback songs so user has a perfect offline search journey
-    res.json(localMatches.length > 0 ? localMatches : FALLBACK_SONGS);
+    // Graceful error recovery: send filtered fallback songs and cache them as well
+    const finalFallback = localMatches.length > 0 ? localMatches : FALLBACK_SONGS;
+    searchCache.set(normalizedQuery, finalFallback);
+    res.json(finalFallback);
   }
 });
 
@@ -1100,16 +1169,24 @@ app.post("/api/lyrics", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  // Check lyricsCache first to save quota
+  const cacheKey = `${title.toLowerCase().trim()}|||${artist.toLowerCase().trim()}`;
+  if (lyricsCache.has(cacheKey)) {
+    console.log(`[Cache Hit] Serving lyrics for "${title}" by "${artist}" from cache.`);
+    res.json(lyricsCache.get(cacheKey));
+    return;
+  }
+
   const ai = getGeminiClient();
   // Safe Offline Mode Helper:
   if (!ai) {
     const knownLyrics = FALLBACK_LYRICS[id];
-    if (knownLyrics) {
-      res.json({ ...knownLyrics, isOfflineFallback: true });
-    } else {
-      // Craft a gorgeous dynamic offline lyric response for non-fallback songs
-      res.json({ ...generateDynamicOfflineLyrics(title, artist, duration || 200), isOfflineFallback: true });
-    }
+    const fallbackResponse = knownLyrics 
+      ? { ...knownLyrics, isOfflineFallback: true }
+      : { ...generateDynamicOfflineLyrics(title, artist, duration || 200), isOfflineFallback: true };
+    
+    lyricsCache.set(cacheKey, fallbackResponse);
+    res.json(fallbackResponse);
     return;
   }
 
@@ -1156,16 +1233,21 @@ Generate this output in JSON format complying strictly with the requested scheme
     });
 
     const resultText = response.text || "{}";
-    res.json(JSON.parse(resultText));
+    const parsedLyrics = cleanAndParseJSON<any>(resultText, {});
+    
+    // Store in cache for any future calls
+    lyricsCache.set(cacheKey, parsedLyrics);
+    res.json(parsedLyrics);
   } catch (error: any) {
     handleGeminiError(error, "Lyrics");
     // Safe fallback so interface doesn't stall
     const knownLyrics = FALLBACK_LYRICS[id];
-    if (knownLyrics) {
-      res.json({ ...knownLyrics, isOfflineFallback: true });
-    } else {
-      res.json({ ...generateDynamicOfflineLyrics(title, artist, duration || 200), isOfflineFallback: true });
-    }
+    const fallbackResponse = knownLyrics 
+      ? { ...knownLyrics, isOfflineFallback: true }
+      : { ...generateDynamicOfflineLyrics(title, artist, duration || 200), isOfflineFallback: true };
+    
+    lyricsCache.set(cacheKey, fallbackResponse);
+    res.json(fallbackResponse);
   }
 });
 
@@ -1236,11 +1318,21 @@ app.post("/api/suggestions", async (req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // Define unique cached key based on the sorted list of song IDs in the current playlist
+  const cacheKey = songs.map(s => s.id).sort().join(",");
+  if (suggestionsCache.has(cacheKey)) {
+    console.log(`[Cache Hit] Serving song suggestions from cache.`);
+    res.json(suggestionsCache.get(cacheKey));
+    return;
+  }
+
   const ai = getGeminiClient();
   if (!ai) {
     // Generate lovely relative context suggestions
     const matched = FALLBACK_SONGS.filter(fs => !songs.some(s => s.id === fs.id));
-    res.json(matched.length > 0 ? matched.slice(0, 3) : FALLBACK_SONGS.slice(0, 3));
+    const fallbackResult = matched.length > 0 ? matched.slice(0, 3) : FALLBACK_SONGS.slice(0, 3);
+    suggestionsCache.set(cacheKey, fallbackResult);
+    res.json(fallbackResult);
     return;
   }
 
@@ -1287,16 +1379,20 @@ Ensure each suggested track features rich chord progression (4 simple chords), p
     });
 
     const resultText = response.text || "[]";
-    const recommended = JSON.parse(resultText).map((s: any) => ({
+    const recommended = cleanAndParseJSON<any[]>(resultText, []).map((s: any) => ({
       ...s,
       albumArtSeed: s.id || `${s.title.toLowerCase().replace(/\s+/g, '-')}-${s.artist.toLowerCase().replace(/\s+/g, '-')}`
     }));
+    
+    suggestionsCache.set(cacheKey, recommended);
     res.json(recommended);
   } catch (error: any) {
     handleGeminiError(error, "Suggestions");
     // Graceful offline fallback
     const matched = FALLBACK_SONGS.filter(fs => !songs.some(s => s.id === fs.id));
-    res.json(matched.length > 0 ? matched.slice(0, 3) : FALLBACK_SONGS.slice(0, 3));
+    const fallbackResult = matched.length > 0 ? matched.slice(0, 3) : FALLBACK_SONGS.slice(0, 3);
+    suggestionsCache.set(cacheKey, fallbackResult);
+    res.json(fallbackResult);
   }
 });
 
@@ -1419,8 +1515,9 @@ Apakah ada kalimat lirik tertentu yang ingin Anda bedah bait per bait bersama sa
 // ----------------------------------------------------
 async function runServer() {
   if (process.env.NODE_ENV !== "production") {
-    // Development Mode: Mount Vite Middleware
+    // Development Mode: Dynamic import Vite to avoid production startup crashes in Serverless/Vercel
     console.log("Starting server in DEVELOPMENT mode with Vite Middleware...");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -1446,6 +1543,11 @@ async function runServer() {
   });
 }
 
-runServer().catch((err) => {
-  console.error("Critical Server Boot Failure:", err);
-});
+// Only launch standalone listening port if not being loaded in a Serverless context (e.g. Vercel)
+if (process.env.VERCEL !== "1") {
+  runServer().catch((err) => {
+    console.error("Critical Server Boot Failure:", err);
+  });
+}
+
+export default app;

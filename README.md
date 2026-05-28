@@ -1,20 +1,40 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# AuraLirik Music Player 🎵
 
-# Run and deploy your AI Studio app
+Aplikasi pemutar musik rich-media dan pencari lirik lagu pinter bertenaga **React, TypeScript, Express, dan Gemini API**.
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/4bc1d48c-39e3-4ac6-be8b-f501316bce74
+## 🚀 Panduan Deploy ke GitHub & Vercel
 
-## Run Locally
+Aplikasi ini sudah dikonfigurasi sepenuhnya agar kompatibel untuk **dideploy di Vercel dalam hitungan detik** dengan folder `/api` serverless express backend dan `/dist` static frontend.
 
-**Prerequisites:**  Node.js
+### Langkah 1: Hubungkan ke GitHub
+1. Buat sebuah repositori baru di akun **GitHub** Anda.
+2. Push seluruh folder proyek ini ke repositori tersebut:
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit to GitHub"
+   git branch -M main
+   git remote add origin https://github.com/USERNAME/NAMA-REPOSITORI.git
+   git push -u origin main
+   ```
 
+### Langkah 2: Hubungkan & Deploy ke Vercel
+1. Buka dashboard **[Vercel](https://vercel.com/)** Anda.
+2. Klik tombol **"Add New"** -> **"Project"**.
+3. Cari dan **Import** repositori GitHub yang baru saja Anda buat.
+4. Di bagian **Build & Development Settings**, Vercel akan otomatis mengenali setup Vite + Express:
+   - *Framework Preset*: Pilih **Vite** atau biarkan default/Other.
+   - *Build Command*: `npm run build`
+   - *Output Directory*: `dist`
+5. Di bagian **Environment Variables**, tambahkan rahasia kunci API berikut agar fitur cerdas AI Anda berfungsi di cloud:
+   - `GEMINI_API_KEY` = *Masukkan kunci API Gemini Anda*
+6. Klik **"Deploy"**! 🎉
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+
+## 🛠️ Mengapa Hubungan Ini Sekarang Berfungsi Sempurna?
+Kami telah menyempurnakan struktur kode proyek agar mendukung kedua model komputasi:
+- **Lokal / Container Run**: Menggunakan Express internal dinamis pada `http://localhost:3000` dengan import Vite bertranspilasi on-the-fly.
+- **Serverless / Vercel Edge**: Menggunakan router modular tanpa-blok (`vercel.json`) yang meredireksi semua pemicu `/api/*` langsung ke serverless function `api/index.ts`. Ini menekan penggunaan memori dan biaya hosting Anda secara maksimal!
