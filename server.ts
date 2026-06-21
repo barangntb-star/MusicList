@@ -822,6 +822,52 @@ app.get("/api/youtube-suggest", async (req: Request, res: Response): Promise<voi
 });
 
 // ----------------------------------------------------
+// PLAYLIST PERSISTENCE CONTROLLERS
+// ----------------------------------------------------
+import fs from "fs";
+
+const PLAYLISTS_FILE = path.join(process.cwd(), "playlists.json");
+
+// Helper to read playlists from file
+function readPlaylistsFromFile(): any[] {
+  try {
+    if (fs.existsSync(PLAYLISTS_FILE)) {
+      const data = fs.readFileSync(PLAYLISTS_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error("Error reading playlists file:", error);
+  }
+  return [];
+}
+
+// Helper to write playlists to file
+function writePlaylistsToFile(playlists: any[]) {
+  try {
+    fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(playlists, null, 2), "utf-8");
+  } catch (error) {
+    console.error("Error writing playlists file:", error);
+  }
+}
+
+// GET /api/playlists
+app.get("/api/playlists", (req: Request, res: Response) => {
+  const playlists = readPlaylistsFromFile();
+  res.json({ playlists });
+});
+
+// POST /api/playlists
+app.post("/api/playlists", (req: Request, res: Response) => {
+  const { playlists } = req.body;
+  if (!Array.isArray(playlists)) {
+    res.status(400).json({ error: "playlists harus berupa array" });
+    return;
+  }
+  writePlaylistsToFile(playlists);
+  res.json({ success: true, count: playlists.length });
+});
+
+// ----------------------------------------------------
 // GEMINI API CONTROLLERS
 // ----------------------------------------------------
 

@@ -234,15 +234,32 @@ export default function App() {
     synthRef.current = new AudioSynthManager();
     synthRef.current.setVolume(0.5);
 
-    // 2. Load custom playlists from LocalStorage
-    const storedPlaylists = localStorage.getItem(STORAGE_PLAYLISTS_KEY);
-    if (storedPlaylists) {
+    // 2. Load custom playlists (fetch from server API with local storage as a fallback)
+    const loadInitialPlaylists = async () => {
       try {
-        setPlaylists(JSON.parse(storedPlaylists));
+        const res = await fetch("/api/playlists");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.playlists) && data.playlists.length > 0) {
+            setPlaylists(data.playlists);
+            return;
+          }
+        }
       } catch (e) {
-        console.error("Failed to parse playlists:", e);
+        console.warn("[Load] Gagal mengambil playlist dari server, beralih ke local storage:", e);
       }
-    }
+
+      // Local storage fallback
+      const storedPlaylists = localStorage.getItem(STORAGE_PLAYLISTS_KEY);
+      if (storedPlaylists) {
+        try {
+          setPlaylists(JSON.parse(storedPlaylists));
+        } catch (e) {
+          console.error("Failed to parse playlists:", e);
+        }
+      }
+    };
+    loadInitialPlaylists();
 
     // 3. Load last played song
     const storedLastSong = localStorage.getItem(STORAGE_LAST_SONG_KEY);
@@ -479,10 +496,25 @@ export default function App() {
     }
   };
 
+  // Helper to persist playlists to server-side API and LocalStorage
+  const savePlaylists = async (updated: Playlist[]) => {
+    setPlaylists(updated);
+    localStorage.setItem(STORAGE_PLAYLISTS_KEY, JSON.stringify(updated));
+    try {
+      await fetch("/api/playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playlists: updated })
+      });
+    } catch (e) {
+      console.warn("[Sync] Gagal menyimpan playlist ke server, memakai local cache saja:", e);
+    }
+  };
+
   const handleAskAISuggestions = async (playlist: Playlist) => {
     if (playlist.songs.length === 0 || isSuggesting) return;
     setIsSuggesting(true);
-
+    
     try {
       const res = await fetch("/api/suggestions", {
         method: "POST",
@@ -505,8 +537,7 @@ export default function App() {
           return pl;
         });
 
-        setPlaylists(updatedPlaylists);
-        localStorage.setItem(STORAGE_PLAYLISTS_KEY, JSON.stringify(updatedPlaylists));
+        await savePlaylists(updatedPlaylists);
         
         // Auto update current playlist UI view
         const refreshedCurrent = updatedPlaylists.find((pl) => pl.id === playlist.id) || null;
@@ -520,10 +551,10 @@ export default function App() {
   };
 
   // ----------------------------------------------------
-  // PLAYLIST MODIFIERS (CLIENT SIDE STORAGE)
+  // PLAYLIST MODIFIERS (CLIENT/SERVER PERSISTENCE)
   // ----------------------------------------------------
 
-  const handleCreatePlaylist = (name: string, desc?: string) => {
+  const handleCreatePlaylist = async (name: string, desc?: string) => {
     const newPl: Playlist = {
       id: `pl-${Date.now()}`,
       name,
@@ -532,20 +563,18 @@ export default function App() {
       songs: []
     };
     const updated = [...playlists, newPl];
-    setPlaylists(updated);
-    localStorage.setItem(STORAGE_PLAYLISTS_KEY, JSON.stringify(updated));
+    await savePlaylists(updated);
   };
 
-  const handleDeletePlaylist = (id: string) => {
+  const handleDeletePlaylist = async (id: string) => {
     const updated = playlists.filter((pl) => pl.id !== id);
-    setPlaylists(updated);
-    localStorage.setItem(STORAGE_PLAYLISTS_KEY, JSON.stringify(updated));
+    await savePlaylists(updated);
     if (currentPlaylist?.id === id) {
       setCurrentPlaylist(null);
     }
   };
 
-  const handleAddSongToPlaylist = (playlistId: string, song: Song) => {
+  const handleAddSongToPlaylist = async (playlistId: string, song: Song) => {
     const updated = playlists.map((pl) => {
       if (pl.id === playlistId) {
         // Prevent duplicate songs inside the same list
@@ -558,8 +587,7 @@ export default function App() {
       return pl;
     });
 
-    setPlaylists(updated);
-    localStorage.setItem(STORAGE_PLAYLISTS_KEY, JSON.stringify(updated));
+    await savePlaylists(updated);
     
     // Sync current viewed playlist if active
     if (currentPlaylist?.id === playlistId) {
@@ -567,7 +595,7 @@ export default function App() {
     }
   };
 
-  const handleRemoveSongFromPlaylist = (playlistId: string, songId: string) => {
+  const handleRemoveSongFromPlaylist = async (playlistId: string, songId: string) => {
     const updated = playlists.map((pl) => {
       if (pl.id === playlistId) {
         return {
@@ -578,8 +606,7 @@ export default function App() {
       return pl;
     });
 
-    setPlaylists(updated);
-    localStorage.setItem(STORAGE_PLAYLISTS_KEY, JSON.stringify(updated));
+    await savePlaylists(updated);
 
     // Sync active viewed playlist
     if (currentPlaylist?.id === playlistId) {
